@@ -6366,7 +6366,7 @@ bool store_schema_params(THD *thd, TABLE *table, TABLE *proc_table,
   sp_head *sp;
   const Sp_handler *sph;
   bool free_sp_head;
-  bool error= 0;
+  bool error= false;
   sql_mode_t sql_mode;
   DBUG_ENTER("store_schema_params");
 
@@ -6383,13 +6383,13 @@ bool store_schema_params(THD *thd, TABLE *table, TABLE *proc_table,
                                       val_int());
   if (!sph || sph->type() == SP_TYPE_PACKAGE ||
       sph->type() == SP_TYPE_PACKAGE_BODY)
-    DBUG_RETURN(0);
+    goto finish;
 
   if (!full_access)
     full_access= !strcmp(sp_user, definer.str);
   if (!full_access &&
       check_some_routine_access(thd, db.str, name.str, sph))
-    DBUG_RETURN(0);
+    goto finish;
 
   proc_table->field[MYSQL_PROC_FIELD_PARAM_LIST]->val_str_nopad(thd->mem_root,
                                                                 &params);
@@ -6426,7 +6426,8 @@ bool store_schema_params(THD *thd, TABLE *table, TABLE *proc_table,
         free_table_share(&share);
         if (free_sp_head)
           sp_head::destroy(sp);
-        DBUG_RETURN(1);
+        error= true;
+        goto finish;
       }
     }
 
@@ -6467,13 +6468,15 @@ bool store_schema_params(THD *thd, TABLE *table, TABLE *proc_table,
       store_variable_type(thd, spvar, &tbl, &share, cs, table, 6);
       if (schema_table_store_record(thd, table))
       {
-        error= 1;
+        error= true;
         break;
       }
     }
     if (free_sp_head)
       sp_head::destroy(sp);
   }
+
+finish:
   free_table_share(&share);
   DBUG_RETURN(error);
 }
