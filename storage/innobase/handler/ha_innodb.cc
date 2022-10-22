@@ -8655,6 +8655,9 @@ ha_innobase::update_row(
 			? VERSIONED_DELETE
 			: NO_DELETE;
 
+		if (m_prebuilt->upd_node->is_delete) {
+			trx->fts_next_doc_id = 0;
+		}
 		error = row_update_for_mysql(m_prebuilt);
 
 		if (error == DB_SUCCESS && vers_ins_row
@@ -8765,6 +8768,7 @@ ha_innobase::delete_row(
 		&& trx->id != table->vers_start_id()
 		? VERSIONED_DELETE
 		: PLAIN_DELETE;
+	trx->fts_next_doc_id = 0;
 
 	error = row_update_for_mysql(m_prebuilt);
 
