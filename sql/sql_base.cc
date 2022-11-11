@@ -63,6 +63,8 @@
 #include "wsrep_trans_observer.h"
 #endif /* WITH_WSREP */
 
+#include <algorithm>
+
 
 bool
 No_such_table_error_handler::handle_condition(THD *,
@@ -4497,23 +4499,27 @@ restart:
       tbl->reginfo.skip_locked= tables->skip_locked;
     }
 
-    if (tbl->file->referenced_by_foreign_key())
+    if (tables->fk_ref_list)
     {
       DBUG_ASSERT(tbl->pos_in_table_list == tables);
       List<FOREIGN_KEY_INFO> fk_list;
       tbl->file->get_parent_foreign_key_list(thd, &fk_list);
-      List_iterator<FOREIGN_KEY_INFO> fk_it(*tables->fk_ref_list);
-      for (const FOREIGN_KEY_INFO &fk: fk_list)
+      if (fk_list.elements == 0)
       {
-        const FOREIGN_KEY_INFO *fk_in_table= fk_it++;
-        if (strcmp(fk.foreign_id->str, fk_in_table->foreign_id->str) != 0)
-        {
-          /* This FK was DROP-ed while prelocking. Remove it from the list. */
-          fk_it.remove();
-        }
+        tables->fk_ref_list= NULL;
       }
-      while(fk_it++)
-        fk_it.remove();
+      else if (fk_list.elements != tables->fk_ref_list->elements)
+      {
+        for (FOREIGN_KEY_INFO &fk: fk_list)
+        {
+          auto fk_table_it= std::find(tables->fk_ref_list->begin(),
+                                      tables->fk_ref_list->end(),
+                                      fk.foreign_id->str);
+          DBUG_ASSERT(fk_table_it != tables->fk_ref_list->end());
+          fk.table_list= fk_table_it->table_list;
+        }
+        tables->fk_ref_list->swap(fk_list);
+      }
     }
 #ifdef WITH_WSREP
     /*
