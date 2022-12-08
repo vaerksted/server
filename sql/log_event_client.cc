@@ -2097,9 +2097,9 @@ err:
 }
 
 
-bool Start_log_event_v3::print(FILE* file, PRINT_EVENT_INFO* print_event_info)
+bool Format_description_log_event::print(FILE* file, PRINT_EVENT_INFO* print_event_info)
 {
-  DBUG_ENTER("Start_log_event_v3::print");
+  DBUG_ENTER("Format_description_log_event::print");
 
   Write_on_release_cache cache(&print_event_info->head_cache, file,
                                Write_on_release_cache::FLUSH_F);
@@ -2619,61 +2619,6 @@ bool Stop_log_event::print(FILE* file, PRINT_EVENT_INFO* print_event_info)
 #endif
 
 
-bool Create_file_log_event::print(FILE* file,
-                                  PRINT_EVENT_INFO* print_event_info,
-				  bool enable_local)
-{
-  if (print_event_info->short_form)
-  {
-    if (enable_local && check_fname_outside_temp_buf())
-      return Load_log_event::print(file, print_event_info);
-    return 0;
-  }
-
-  Write_on_release_cache cache(&print_event_info->head_cache, file);
-
-  if (enable_local)
-  {
-    if (Load_log_event::print(file, print_event_info,
-                              !check_fname_outside_temp_buf()))
-      goto err;
-
-    /**
-      reduce the size of io cache so that the write function is called
-      for every call to my_b_printf().
-     */
-    DBUG_EXECUTE_IF ("simulate_create_event_write_error",
-                     {(&cache)->write_pos= (&cache)->write_end;
-                     DBUG_SET("+d,simulate_file_write_error");});
-    /*
-      That one is for "file_id: etc" below: in mysqlbinlog we want the #, in
-      SHOW BINLOG EVENTS we don't.
-     */
-    if (my_b_write_byte(&cache, '#'))
-      goto err;
-  }
-
-  if (my_b_printf(&cache, " file_id: %d  block_len: %d\n", file_id, block_len))
-    goto err;
-
-  return cache.flush_data();
-err:
-  return 1;
-
-}
-
-
-bool Create_file_log_event::print(FILE* file,
-                                  PRINT_EVENT_INFO* print_event_info)
-{
-  return print(file, print_event_info, 0);
-}
-
-
-/*
-  Append_block_log_event::print()
-*/
-
 bool Append_block_log_event::print(FILE* file,
 				   PRINT_EVENT_INFO* print_event_info)
 {
@@ -2693,10 +2638,6 @@ err:
 }
 
 
-/*
-  Delete_file_log_event::print()
-*/
-
 bool Delete_file_log_event::print(FILE* file,
 				  PRINT_EVENT_INFO* print_event_info)
 {
@@ -2712,25 +2653,6 @@ bool Delete_file_log_event::print(FILE* file,
   return cache.flush_data();
 }
 
-/*
-  Execute_load_log_event::print()
-*/
-
-bool Execute_load_log_event::print(FILE* file,
-				   PRINT_EVENT_INFO* print_event_info)
-{
-  if (print_event_info->short_form)
-    return 0;
-
-  Write_on_release_cache cache(&print_event_info->head_cache, file);
-
-  if (print_header(&cache, print_event_info, FALSE) ||
-      my_b_printf(&cache, "\n#Exec_load: file_id=%d\n",
-                  file_id))
-    return 1;
-
-  return cache.flush_data();
-}
 
 bool Execute_load_query_log_event::print(FILE* file,
                                          PRINT_EVENT_INFO* print_event_info)
@@ -2987,10 +2909,6 @@ err:
 
   where fragments are represented by a pair of indexed user
   "one shot" variables.
-
-  @note
-  If any changes made don't forget to duplicate them to
-  Old_rows_log_event as long as it's supported.
 
   @param file               pointer to IO_CACHE
   @param print_event_info   pointer to print_event_info specializing
