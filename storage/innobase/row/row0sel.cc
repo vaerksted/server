@@ -5200,8 +5200,10 @@ wrong_offs:
 		ut_ad(set_also_gap_locks);
 #endif /* WITH_WSREP */
 
-		if ((unique_search && !rec_get_deleted_flag(rec, comp))
-		    || dict_index_is_spatial(index)) {
+		/* Set next-key lock both for delete- and non-delete-marked
+		records for unique search, because non-delete-marked record can
+		be marked as deleted while transaction suspends. */
+		if (dict_index_is_spatial(index)) {
 
 			goto no_gap_lock;
 		} else {
