@@ -1353,10 +1353,9 @@ int ha_partition::create_partition(TABLE *tbl, HA_CREATE_INFO *create_info,
                                    uint disable_non_uniq_indexes)
 {
   int error;
-  DBUG_ENTER("create_partition");
-
   const uint part= p_elem->serial_id(m_part_info->num_subparts);
   handler *file= m_new_file[part];
+  DBUG_ENTER("create_partition");
 
   /*
     This call to set_up_table_before_create() is done for an alter table.
@@ -1459,15 +1458,12 @@ void ha_partition::cleanup_new_partition()
   if (m_added_file)
   {
     THD *thd= ha_thd();
-    handler **file= m_added_file;
-    while (*file)
+    for (handler **file= m_added_file; *file; file++)
     {
       (*file)->ha_external_unlock(thd);
       (*file)->ha_close();
 
       /* Leave the (*file)->delete_table(part_name) to the ddl-log */
-
-      file++;
     }
     m_added_file= NULL;
   }

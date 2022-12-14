@@ -171,6 +171,12 @@ public:
     return ev->col_val_array[idx];
   }
 
+  /**
+    Positional ID in ha_partition::m_file array
+
+    @param  num_subparts  In case this element is subpartition this must be the
+                          total number of subpartitions, 0 otherwise.
+  */
   uint32 serial_id(uint num_subparts) const
   {
     DBUG_ASSERT(num_subparts || !parent_part);
