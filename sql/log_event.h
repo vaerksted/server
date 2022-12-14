@@ -2587,21 +2587,12 @@ public:
                   Name_resolution_context *context);
   const char* get_db() { return db; }
 #ifdef HAVE_REPLICATION
-  void pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol) {};
 #endif /* HAVE_REPLICATION */
 #else
-  bool print(FILE* file, PRINT_EVENT_INFO* print_event_info);
-  bool print(FILE* file, PRINT_EVENT_INFO* print_event_info, bool commented);
+  bool print(FILE* file, PRINT_EVENT_INFO* print_event_info) { return 0; };
 #endif
 
-  /*
-    Note that for all the events related to LOAD DATA (Load_log_event,
-    Create_file/Append/Exec/Delete, we pass description_event; however as
-    logging of LOAD DATA is going to be changed in 4.1 or 5.0, this is only used
-    for the common_header_len (post_header_len will not be changed).
-  */
-  Load_log_event(const uchar *buf, uint event_len,
-                 const Format_description_log_event* description_event);
   ~Load_log_event()
   {}
   Log_event_type get_type_code()
@@ -2609,8 +2600,6 @@ public:
     return sql_ex.new_format() ? NEW_LOAD_EVENT: LOAD_EVENT;
   }
 #ifdef MYSQL_SERVER
-  bool write_data_header();
-  bool write_data_body();
 #endif
   bool is_valid() const { return table_name != 0; }
   int get_data_size()
@@ -2619,17 +2608,6 @@ public:
 	    + LOAD_HEADER_LEN
 	    + sql_ex.data_size() + field_block_len + num_fields);
   }
-
-public:        /* !!! Public in this patch to allow old usage */
-#if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
-  virtual int do_apply_event(rpl_group_info *rgi)
-  {
-    return do_apply_event(thd->slave_net,rgi,0);
-  }
-
-  int do_apply_event(NET *net, rpl_group_info *rgi,
-                     bool use_rli_only_for_errors);
-#endif
 };
 
 
@@ -3811,9 +3789,7 @@ public:
     used by Append_block_log_event::write()), so it can't be read in
     the Append_block_log_event(const uchar *buf, int event_len)
     constructor.  In other words, 'db' is used only for filtering by
-    binlog-*-db rules.  Create_file_log_event is different: it's 'db'
-    (which is inherited from Load_log_event) is written to the binlog
-    and can be re-read.
+    binlog-*-db rules.
   */
   const char* db;
 

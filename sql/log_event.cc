@@ -1095,12 +1095,6 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
       ev= new Query_compressed_log_event(buf, event_len, fdle,
                                           QUERY_COMPRESSED_EVENT);
       break;
-    case LOAD_EVENT:
-      ev= new Load_log_event(buf, event_len, fdle);
-      break;
-    case NEW_LOAD_EVENT:
-      ev= new Load_log_event(buf, event_len, fdle);
-      break;
     case ROTATE_EVENT:
       ev= new Rotate_log_event(buf, event_len, fdle);
       break;
@@ -1202,6 +1196,8 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
     case START_EVENT_V3: /* this is sent only by MySQL <=4.x */
     case CREATE_FILE_EVENT:
     case EXEC_LOAD_EVENT:
+    case LOAD_EVENT:
+    case NEW_LOAD_EVENT:
     default:
       DBUG_PRINT("error",("Unknown event code: %d",
                           (uchar) buf[EVENT_TYPE_OFFSET]));
@@ -2306,120 +2302,6 @@ Start_encryption_log_event(const uchar *buf, uint event_len,
     crypto_scheme= ~0; // invalid
 }
 
-
-/**************************************************************************
-        Load_log_event methods
-   General note about Load_log_event: the binlogging of LOAD DATA INFILE is
-   going to be changed in 5.0 (or maybe in 5.1; not decided yet).
-   However, the 5.0 slave could still have to read such events (from a 4.x
-   master), convert them (which just means maybe expand the header, when 5.0
-   servers have a UID in events) (remember that whatever is after the header
-   will be like in 4.x, as this event's format is not modified in 5.0 as we
-   will use new types of events to log the new LOAD DATA INFILE features).
-   To be able to read/convert, we just need to not assume that the common
-   header is of length LOG_EVENT_HEADER_LEN (we must use the description
-   event).
-   Note that I (Guilhem) manually tested replication of a big LOAD DATA INFILE
-   between 3.23 and 5.0, and between 4.0 and 5.0, and it works fine (and the
-   positions displayed in SHOW SLAVE STATUS then are fine too).
-**************************************************************************/
-
-
-/**
-  @note
-    The caller must do buf[event_len]= 0 before he starts using the
-    constructed event.
-*/
-
-Load_log_event::Load_log_event(const uchar *buf, uint event_len,
-                               const Format_description_log_event
-                               *description_event)
-  :Log_event(buf, description_event), num_fields(0), fields(0),
-   field_lens(0),field_block_len(0),
-   table_name(0), db(0), fname(0), local_fname(FALSE),
-   /*
-     Load_log_event which comes from the binary log does not contain
-     information about the type of insert which was used on the master.
-     Assume that it was an ordinary, non-concurrent LOAD DATA.
-    */
-   is_concurrent(FALSE)
-{
-  DBUG_ENTER("Load_log_event");
-  /*
-    I (Guilhem) manually tested replication of LOAD DATA INFILE for 3.23->5.0,
-    4.0->5.0 and 5.0->5.0 and it works.
-  */
-  if (event_len)
-    copy_log_event(buf, event_len,
-                   (((uchar)buf[EVENT_TYPE_OFFSET] == LOAD_EVENT) ?
-                   LOAD_HEADER_LEN + 
-                    description_event->common_header_len :
-                    LOAD_HEADER_LEN + LOG_EVENT_HEADER_LEN),
-                   description_event);
-  /* otherwise it's a derived class, will call copy_log_event() itself */
-  DBUG_VOID_RETURN;
-}
-
-
-/*
-  Load_log_event::copy_log_event()
-*/
-
-int Load_log_event::copy_log_event(const uchar *buf, ulong event_len,
-                                   int body_offset,
-                                   const Format_description_log_event
-                                   *description_event)
-{
-  DBUG_ENTER("Load_log_event::copy_log_event");
-  uint data_len;
-  if ((int) event_len <= body_offset)
-    DBUG_RETURN(1);
-  const uchar *buf_end= buf + event_len;
-  /* this is the beginning of the post-header */
-  const uchar *data_head= buf + description_event->common_header_len;
-  thread_id= slave_proxy_id= uint4korr(data_head + L_THREAD_ID_OFFSET);
-  exec_time= uint4korr(data_head + L_EXEC_TIME_OFFSET);
-  skip_lines= uint4korr(data_head + L_SKIP_LINES_OFFSET);
-  table_name_len= (uint)data_head[L_TBL_LEN_OFFSET];
-  db_len= (uint)data_head[L_DB_LEN_OFFSET];
-  num_fields= uint4korr(data_head + L_NUM_FIELDS_OFFSET);
-
-  /*
-    Sql_ex.init() on success returns the pointer to the first byte after
-    the sql_ex structure, which is the start of field lengths array.
-  */
-  if (!(field_lens= (uchar*) sql_ex.init(buf + body_offset, buf_end,
-                                         buf[EVENT_TYPE_OFFSET] != LOAD_EVENT)))
-    DBUG_RETURN(1);
-
-  data_len= event_len - body_offset;
-  if (num_fields > data_len) // simple sanity check against corruption
-    DBUG_RETURN(1);
-  for (uint i= 0; i < num_fields; i++)
-    field_block_len+= (uint)field_lens[i] + 1;
-
-  fields= (char*) field_lens + num_fields;
-  table_name= fields + field_block_len;
-  if (strlen(table_name) > NAME_LEN)
-    goto err;
-
-  db= table_name + table_name_len + 1;
-  DBUG_EXECUTE_IF("simulate_invalid_address", db_len= data_len;);
-  fname= db + db_len + 1;
-  if ((db_len > data_len) || (fname > (char*) buf_end))
-    goto err;
-  fname_len= (uint) strlen(fname);
-  if ((fname_len > data_len) || (fname + fname_len > (char*) buf_end))
-    goto err;
-  // null termination is accomplished by the caller doing buf[event_len]=0
-
-  DBUG_RETURN(0);
-
-err:
-  // Invalid event.
-  table_name= 0;
-  DBUG_RETURN(1);
-}
 
 
 /**************************************************************************

@@ -386,111 +386,10 @@ public:
     }
   Exit_status process(Begin_load_query_log_event *blqe);
   Exit_status process(Append_block_log_event *ae);
-  File prepare_new_file_for_old_format(Load_log_event *le, char *filename);
-  Exit_status load_old_format_file(NET* net, const char *server_fname,
-                                   uint server_fname_len, File file);
   Exit_status process_first_event(const char *bname, size_t blen,
                                   const uchar *block,
                                   size_t block_len, uint file_id);
 };
-
-
-/**
-  Creates and opens a new temporary file in the directory specified by previous call to init_by_dir_name() or init_by_cur_dir().
-
-  @param[in] le The basename of the created file will start with the
-  basename of the file pointed to by this Load_log_event.
-
-  @param[out] filename Buffer to save the filename in.
-
-  @return File handle >= 0 on success, -1 on error.
-*/
-File Load_log_processor::prepare_new_file_for_old_format(Load_log_event *le,
-							 char *filename)
-{
-  size_t len;
-  char *tail;
-  File file;
-  
-  fn_format(filename, le->fname, target_dir_name, "", MY_REPLACE_DIR);
-  len= strlen(filename);
-  tail= filename + len;
-  
-  if ((file= create_unique_file(filename,tail)) < 0)
-  {
-    error("Could not construct local filename %s.",filename);
-    return -1;
-  }
-  
-  le->set_fname_outside_temp_buf(filename,len+strlen(tail));
-  
-  return file;
-}
-
-
-/**
-  Reads a file from a server and saves it locally.
-
-  @param[in,out] net The server to read from.
-
-  @param[in] server_fname The name of the file that the server should
-  read.
-
-  @param[in] server_fname_len The length of server_fname.
-
-  @param[in,out] file The file to write to.
-
-  @retval ERROR_STOP An error occurred - the program should terminate.
-  @retval OK_CONTINUE No error, the program should continue.
-*/
-Exit_status Load_log_processor::load_old_format_file(NET* net,
-                                                     const char*server_fname,
-                                                     uint server_fname_len,
-                                                     File file)
-{
-  uchar buf[FN_REFLEN+1];
-  buf[0] = 0;
-  memcpy(buf + 1, server_fname, server_fname_len + 1);
-  if (my_net_write(net, buf, server_fname_len +2) || net_flush(net))
-  {
-    error("Failed requesting the remote dump of %s.", server_fname);
-    return ERROR_STOP;
-  }
-  
-  for (;;)
-  {
-    ulong packet_len = my_net_read(net);
-    if (packet_len == 0)
-    {
-      if (my_net_write(net, (uchar*) "", 0) || net_flush(net))
-      {
-        error("Failed sending the ack packet.");
-        return ERROR_STOP;
-      }
-      /*
-	we just need to send something, as the server will read but
-	not examine the packet - this is because mysql_load() sends 
-	an OK when it is done
-      */
-      break;
-    }
-    else if (packet_len == packet_error)
-    {
-      error("Failed reading a packet during the dump of %s.", server_fname);
-      return ERROR_STOP;
-    }
-    
-    if (packet_len > UINT_MAX)
-    {
-      error("Illegal length of packet read from net.");
-      return ERROR_STOP;
-    }
-    if (my_write(file, net->read_pos, (uint) packet_len, MYF(MY_WME|MY_NABP)))
-      return ERROR_STOP;
-  }
-  
-  return OK_CONTINUE;
-}
 
 
 /**
@@ -2728,8 +2627,6 @@ static Exit_status handle_event_text_mode(PRINT_EVENT_INFO *print_event_info,
   }
 
   Log_event_type type= ev->get_type_code();
-  if (glob_description_event->binlog_version >= 3 ||
-      (type != LOAD_EVENT && type != CREATE_FILE_EVENT))
   {
     /*
       If this is a Rotate event, maybe it's the end of the requested binlog;
@@ -2785,31 +2682,6 @@ static Exit_status handle_event_text_mode(PRINT_EVENT_INFO *print_event_info,
         *len= 1;         // fake event, don't increment old_off
     }
     Exit_status retval= process_event(print_event_info, ev, old_off, logname);
-    if (retval != OK_CONTINUE)
-      DBUG_RETURN(retval);
-  }
-  else
-  {
-    Load_log_event *le= (Load_log_event*)ev;
-    const char *old_fname= le->fname;
-    uint old_len= le->fname_len;
-    File file;
-    Exit_status retval;
-    char fname[FN_REFLEN+1];
-
-    if ((file= load_processor.prepare_new_file_for_old_format(le,fname)) < 0)
-    {
-      DBUG_RETURN(ERROR_STOP);
-    }
-
-    retval= process_event(print_event_info, ev, old_off, logname);
-    if (retval != OK_CONTINUE)
-    {
-      my_close(file,MYF(MY_WME));
-      DBUG_RETURN(retval);
-    }
-    retval= load_processor.load_old_format_file(net,old_fname,old_len,file);
-    my_close(file,MYF(MY_WME));
     if (retval != OK_CONTINUE)
       DBUG_RETURN(retval);
   }
