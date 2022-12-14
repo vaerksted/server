@@ -29,6 +29,7 @@
 #include "sql_show.h"                           // append_identifier()
 #include "sql_db.h"                             // drop_database_objects()
 #include <mysys_err.h>                          // EE_LINK
+#include <my_dbug.h>
 
 
 /*--------------------------------------------------------------------------
@@ -2480,6 +2481,7 @@ static bool ddl_log_execute_entry_no_lock(THD *thd, uint first_entry,
   MEM_ROOT mem_root;
   bool result= false;
   DBUG_ENTER("ddl_log_execute_entry_no_lock");
+  DBUG_PRINT("info", ("execute_entry: %u", execute_entry));
 
   mysql_mutex_assert_owner(&LOCK_gdl);
   init_sql_alloc(key_memory_gdl, &mem_root, TABLE_ALLOC_BLOCK_SIZE, 0,
