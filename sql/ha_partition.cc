@@ -1332,7 +1332,8 @@ bool ha_partition::is_crashed() const
 
 
 /*
-  Create a new partition
+  Create a new partition: create, open and lock partition file.
+  Store it to m_added_file.
 
   SYNOPSIS
     create_partition()
@@ -1435,11 +1436,11 @@ error_create:
     NONE
 
   DESCRIPTION
-    This function is called immediately after prepare_new_partition() in
+    This function is called immediately after create_partition() in
     case the latter fails.
 
-    In prepare_new_partition() last call that may return failure is
-    external_lock(). That means if prepare_new_partition() fails,
+    In create_partition() last call that may return failure is
+    external_lock(). That means if create_partition() fails,
     partition does not have external lock. Thus no need to call
     external_lock(F_UNLCK) here.
 
