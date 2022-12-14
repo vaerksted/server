@@ -1698,10 +1698,6 @@ int ha_partition::allocate_partitions()
     change_partitions has done all the preparations, now it is time to
     actually copy the data from the reorganised partitions to the new
     partitions.
-
-  FIXME: removed wrong fix MDEV-28400 (3330f8d1564, fbfd44be)
-         Fix that in copy_partitions(), retest its case from
-         insert_into_empty.test
 */
 
 int ha_partition::copy_partitions(ulonglong * const copied,
@@ -1722,8 +1718,10 @@ int ha_partition::copy_partitions(ulonglong * const copied,
   else if (m_part_info->part_type == VERSIONING_PARTITION)
   {
     if (m_part_info->check_constants(ha_thd(), m_part_info))
-      goto init_error;
+      DBUG_RETURN(0);
   }
+
+  extra_on_new_files(HA_EXTRA_BEGIN_ALTER_COPY);
 
   while (reorg_part < m_reorged_parts)
   {
@@ -1770,12 +1768,16 @@ int ha_partition::copy_partitions(ulonglong * const copied,
     file->ha_rnd_end();
     reorg_part++;
   }
+
+  extra_on_new_files(HA_EXTRA_END_ALTER_COPY);
+
   DBUG_EXECUTE_IF("debug_abort_copy_partitions",
                   DBUG_RETURN(HA_ERR_UNSUPPORTED); );
   DBUG_RETURN(FALSE);
 error:
   m_reorged_file[reorg_part]->ha_rnd_end();
 init_error:
+  extra_on_new_files(HA_EXTRA_END_ALTER_COPY);
   DBUG_RETURN(result);
 }
 

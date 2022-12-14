@@ -588,6 +588,11 @@ public:
                        const char *part_name, partition_element *p_elem,
                        uint disable_non_uniq_indexes);
 private:
+  void extra_on_new_files(enum ha_extra_function operation)
+  {
+    for (handler **f= m_new_file; *f; f++)
+      (*f)->extra(operation);
+  }
   /*
     delete_table and rename_table uses very similar logic which
     is packed into this routine.
