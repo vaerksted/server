@@ -1355,6 +1355,12 @@ int ha_partition::create_partition(TABLE *tbl, HA_CREATE_INFO *create_info,
   int error;
   const uint part= p_elem->serial_id(m_part_info->num_subparts);
   handler *file= m_new_file[part];
+#ifndef DBUG_OFF
+  char part_name_buff[FN_REFLEN + 1];
+  /* Assert that it works without HA_FILE_BASED and lower_case_table_name = 2. */
+  DBUG_ASSERT(!strcmp(part_name, get_canonical_filename(file, part_name,
+                                                        part_name_buff)));
+#endif
   DBUG_ENTER("create_partition");
 
   /*
@@ -1503,17 +1509,6 @@ int ha_partition::allocate_partitions()
   const uint temp_partitions= m_part_info->temp_partitions.elements;
   THD *thd= ha_thd();
   DBUG_ENTER("ha_partition::allocate_partitions");
-
-#if 0
-  // FIXME: put somewhere
-  char part_name_buff[FN_REFLEN + 1];
-  /*
-    Assert that it works without HA_FILE_BASED and lower_case_table_name = 2.
-    We use m_file[0] as long as all partitions have the same storage engine.
-  */
-  DBUG_ASSERT(!strcmp(path, get_canonical_filename(m_file[0], path,
-                                                   part_name_buff)));
-#endif
 
   m_reorged_parts= 0;
 
