@@ -2239,6 +2239,12 @@ ha_innobase::check_if_supported_inplace_alter(
 
 	update_thd();
 
+	if (!m_prebuilt->table->space) {
+		ib_senderrf(m_user_thd, IB_LOG_LEVEL_WARN,
+			    ER_TABLESPACE_DISCARDED,
+			    table->s->table_name.str);
+	}
+
 	if (is_read_only(!high_level_read_only
 			 && (ha_alter_info->handler_flags & ALTER_OPTIONS)
 			 && ha_alter_info->create_info->key_block_size == 0
@@ -5864,7 +5870,16 @@ static bool innobase_instant_try(
 	const dict_col_t* old_cols = user_table->cols;
 	DBUG_ASSERT(user_table->n_cols == ctx->old_n_cols);
 
+#ifdef BTR_CUR_HASH_ADAPT
+	/* Acquire the ahi latch to avoid a race condition
+	between ahi access and instant alter table */
+	srw_spin_lock* ahi_latch = btr_search_sys.get_latch(*index);
+	ahi_latch->wr_lock(SRW_LOCK_CALL);
+#endif /* BTR_CUR_HASH_ADAPT */
 	const bool metadata_changed = ctx->instant_column();
+#ifdef BTR_CUR_HASH_ADAPT
+	ahi_latch->wr_unlock();
+#endif /* BTR_CUR_HASH_ADAPT */
 
 	DBUG_ASSERT(index->n_fields >= n_old_fields);
 	/* The table may have been emptied and may have lost its
@@ -10103,6 +10118,7 @@ commit_try_rebuild(
 	ha_innobase_inplace_ctx*ctx,
 	TABLE*			altered_table,
 	const TABLE*		old_table,
+	bool			statistics_exist,
 	trx_t*			trx,
 	const char*		table_name)
 {
@@ -10173,7 +10189,9 @@ commit_try_rebuild(
 		if (error == DB_SUCCESS) {
 			/* The statistics for the surviving indexes will be
 			re-inserted in alter_stats_rebuild(). */
-			error = trx->drop_table_statistics(old_name);
+			if (statistics_exist) {
+				error = trx->drop_table_statistics(old_name);
+			}
 			if (error == DB_SUCCESS) {
 				error = trx->drop_table(*user_table);
 			}
@@ -11318,6 +11336,7 @@ fail:
 
 			if (commit_try_rebuild(ha_alter_info, ctx,
 					       altered_table, table,
+					       table_stats && index_stats,
 					       trx,
 					       table_share->table_name.str)) {
 				goto fail;
