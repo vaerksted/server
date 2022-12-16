@@ -3,7 +3,6 @@ perl mysql-test-run.pl --verbose-restart --force --suite-timeout=120 --max-test-
 vcol,gcol,perfschema,^
 main,^
 innodb,^
-innodb_fts,^
 versioning,^
 plugins,^
 mariabackup,^
