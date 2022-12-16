@@ -55,7 +55,6 @@ static int check_event_type(int type, Relay_log_info *rli)
 
   switch (type)
   {
-  case START_EVENT_V3:
   case FORMAT_DESCRIPTION_EVENT:
     /*
       We need a preliminary FD event in order to parse the FD event,

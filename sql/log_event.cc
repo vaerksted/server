@@ -649,7 +649,6 @@ int binlog_buf_uncompress(const uchar *src, uchar *dst, uint32 len,
 const char* Log_event::get_type_str(Log_event_type type)
 {
   switch(type) {
-  case START_EVENT_V3:  return "Start_v3";
   case STOP_EVENT:   return "Stop";
   case QUERY_EVENT:  return "Query";
   case ROTATE_EVENT: return "Rotate";
@@ -702,6 +701,7 @@ const char* Log_event::get_type_str(Log_event_type type)
   case UPDATE_ROWS_COMPRESSED_EVENT_V1: return "Update_rows_compressed_v1";
   case DELETE_ROWS_COMPRESSED_EVENT_V1: return "Delete_rows_compressed_v1";
 
+  case START_EVENT_V3: /* fall through */
   default: return "Unknown";				/* impossible */
   }
 }
@@ -982,9 +982,6 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
   }
 
   uint event_type= buf[EVENT_TYPE_OFFSET];
-  // all following START events in the current file are without checksum
-  if (event_type == START_EVENT_V3)
-    (const_cast< Format_description_log_event *>(fdle))->checksum_alg= BINLOG_CHECKSUM_ALG_OFF;
   /*
     CRC verification by SQL and Show-Binlog-Events master side.
     The caller has to provide @fdle->checksum_alg to

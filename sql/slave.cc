@@ -3770,7 +3770,7 @@ sql_delay_event(Log_event *ev, THD *thd, rpl_group_info *rgi)
 
   int type= ev->get_type_code();
   if (sql_delay && type != ROTATE_EVENT &&
-      type != FORMAT_DESCRIPTION_EVENT && type != START_EVENT_V3)
+      type != FORMAT_DESCRIPTION_EVENT)
   {
     // The time when we should execute the event.
     time_t sql_delay_end=
@@ -5944,14 +5944,6 @@ static int queue_event(Master_info* mi, const uchar *buf, ulong event_len)
   if (buf[EVENT_TYPE_OFFSET] == FORMAT_DESCRIPTION_EVENT)
   {
     checksum_alg= get_checksum_alg(buf, event_len);
-  }
-  else if (buf[EVENT_TYPE_OFFSET] == START_EVENT_V3)
-  {
-    // checksum behaviour is similar to the pre-checksum FD handling
-    mi->checksum_alg_before_fd= BINLOG_CHECKSUM_ALG_UNDEF;
-    mi->rli.relay_log.description_event_for_queue->checksum_alg=
-      mi->rli.relay_log.relay_log_checksum_alg= checksum_alg=
-      BINLOG_CHECKSUM_ALG_OFF;
   }
 
   // does not hold always because of old binlog can work with NM 

@@ -1605,7 +1605,6 @@ public:
   {
     switch (ev_type)
     {
-    case START_EVENT_V3:
     case STOP_EVENT:
     case ROTATE_EVENT:
     case SLAVE_EVENT:
