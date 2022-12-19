@@ -1563,9 +1563,9 @@ struct dict_foreign_t{
 		return type & (DICT_FOREIGN_ON_UPDATE_CASCADE |
 			       DICT_FOREIGN_ON_UPDATE_SET_NULL);
 	}
-	bool modifies_child() const {
-		return modifies_child_on_delete() ||
-			modifies_child_on_update();
+	bool modifies_child(bool is_delete) const {
+		return (is_delete && modifies_child_on_delete()) ||
+                       (!is_delete && modifies_child_on_update());
 	}
 };
 
