@@ -4698,7 +4698,7 @@ bool Item_func_json_overlaps::fix_length_and_dec(THD *thd)
 
 longlong Item_func_json_schema_valid::val_int()
 {
-  json_engine_t ve, temp_je;
+  json_engine_t ve;
   int is_valid= 1;
 
   if (!schema_validated)
@@ -4724,8 +4724,7 @@ longlong Item_func_json_schema_valid::val_int()
     Json_schema_keyword* curr_keyword= NULL;
     while ((curr_keyword=it++))
     {
-      temp_je= ve;
-      if (curr_keyword->validate(&temp_je))
+      if (curr_keyword->validate(&ve))
       {
         is_valid= 0;
         break;
@@ -4771,7 +4770,7 @@ bool Item_func_json_schema_valid::fix_length_and_dec(THD *thd)
   keyword_list= new (thd->mem_root) List<Json_schema_keyword>;
   if (keyword_list)
   {
-    if (!create_object_and_handle_keyword(thd, &je, keyword_list, &hash_list,
+    if (!create_object_and_handle_keyword(thd, &je, keyword_list,
                                           &all_keywords))
       schema_validated= true;
     else
@@ -4782,4 +4781,21 @@ bool Item_func_json_schema_valid::fix_length_and_dec(THD *thd)
     report_json_error(js, &je, 1);
 
   return res || Item_bool_func::fix_length_and_dec(thd);
+}
+
+void Item_func_json_schema_valid::cleanup()
+{
+  DBUG_ENTER("Item_func_json_schema_valid::cleanup");
+  Item_bool_func::cleanup();
+
+  List_iterator<Json_schema_keyword> it2(all_keywords);
+  Json_schema_keyword *curr_schema;
+  while ((curr_schema= it2++))
+  {
+    curr_schema->cleanup();
+    delete curr_schema;
+    curr_schema= nullptr;
+  }
+  all_keywords.empty();
+  DBUG_VOID_RETURN;
 }

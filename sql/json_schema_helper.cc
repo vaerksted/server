@@ -26,25 +26,23 @@ bool json_key_equals(const char* key,  LEX_CSTRING val, int key_len)
   return (size_t)key_len == val.length && !strncmp(key, val.str, key_len);
 }
 
-bool json_assign_type(enum json_value_types *curr_type, json_engine_t *je)
+bool json_assign_type(uint *curr_type, json_engine_t *je)
 {
   const char* curr_value= (const char*)je->value;
   int len= je->value_len;
 
   if (json_key_equals(curr_value, { STRING_WITH_LEN("number") }, len))
-      *curr_type= JSON_VALUE_NUMBER;
+      *curr_type|= (1 << JSON_VALUE_NUMBER);
   else if(json_key_equals(curr_value, { STRING_WITH_LEN("string") }, len))
-      *curr_type= JSON_VALUE_STRING;
+      *curr_type|= (1 << JSON_VALUE_STRING);
   else if(json_key_equals(curr_value, { STRING_WITH_LEN("array") }, len))
-      *curr_type= JSON_VALUE_ARRAY;
+      *curr_type|= (1 << JSON_VALUE_ARRAY);
   else if(json_key_equals(curr_value, { STRING_WITH_LEN("object") }, len))
-      *curr_type= JSON_VALUE_OBJECT;
-  else if (json_key_equals(curr_value, { STRING_WITH_LEN("true") }, len))
-      *curr_type= JSON_VALUE_TRUE;
-  else if (json_key_equals(curr_value, { STRING_WITH_LEN("false") }, len))
-      *curr_type= JSON_VALUE_FALSE;
+      *curr_type|= (1 << JSON_VALUE_OBJECT);
+  else if (json_key_equals(curr_value, { STRING_WITH_LEN("boolean") }, len))
+      *curr_type|= ((1 << JSON_VALUE_TRUE) | (1 << JSON_VALUE_FALSE));
   else if (json_key_equals(curr_value, { STRING_WITH_LEN("null") }, len))
-      *curr_type= JSON_VALUE_NULL;
+      *curr_type|= (1 << JSON_VALUE_NULL);
   else
   {
     my_error(ER_JSON_INVALID_VALUE_FOR_KEYWORD, MYF(0), "type");

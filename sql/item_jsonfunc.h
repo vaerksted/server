@@ -798,7 +798,6 @@ class Item_func_json_schema_valid: public Item_bool_func
   bool schema_validated;
   String tmp_val, *val;
   List<Json_schema_keyword> *keyword_list= NULL;
-  List<HASH> hash_list;
   List<Json_schema_keyword> all_keywords;
 
 public:
@@ -817,31 +816,7 @@ public:
   longlong val_int() override;
   Item *get_copy(THD *thd) override
   { return get_item_copy<Item_func_json_schema_valid>(thd, this); }
-  void cleanup()
-  {
-    DBUG_ENTER("Item_func_json_schema_valid::cleanup");
-    Item_bool_func::cleanup();
-
-    List_iterator<HASH> it(hash_list);
-    HASH *curr_hash;
-    while ((curr_hash= it++))
-    {
-      if (my_hash_inited(curr_hash))
-       my_hash_free(curr_hash);
-    }
-    hash_list.empty();
-
-    List_iterator<Json_schema_keyword> it2(all_keywords);
-    Json_schema_keyword *curr_schema;
-    while ((curr_schema= it2++))
-    {
-      curr_schema->cleanup();
-      delete curr_schema;
-      curr_schema= nullptr;
-    }
-    all_keywords.empty();
-    DBUG_VOID_RETURN;
-  }
+  void cleanup() override;
 };
 
 #endif /* ITEM_JSONFUNC_INCLUDED */

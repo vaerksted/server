@@ -1647,34 +1647,36 @@ SELECT JSON_SCHEMA_VALID(@schema, 'false');
 
 --echo # Checking boolean and null
 
-SET @schema_true= '{ "type": "true"}';
+SET @schema_true= '{ "type": "boolean"}';
 SELECT JSON_SCHEMA_VALID(@schema_true, 'true');
 SELECT JSON_SCHEMA_VALID(@schema_true, 'false');
 SELECT JSON_SCHEMA_VALID(@schema_true, 'null');
-SET @schema_false= '{ "type": "false"}';
-SELECT JSON_SCHEMA_VALID(@schema_false, 'true');
-SELECT JSON_SCHEMA_VALID(@schema_false, 'false');
-SELECT JSON_SCHEMA_VALID(@schema_false, 'null');
-SET @schema_null= '{ "type": "null"}';
-SELECT JSON_SCHEMA_VALID(@schema_null, 'true');
-SELECT JSON_SCHEMA_VALID(@schema_null, 'false');
-SELECT JSON_SCHEMA_VALID(@schema_null, 'null');
 
-SET @schema_true= '{ "type": "true",
+SET @schema_true= '{ "type": "boolean",
                      "const":"false"}';
 SELECT JSON_SCHEMA_VALID(@schema_true, 'true');
-SET @schema_true= '{ "type": "true",
+SET @schema_true= '{ "type": "boolean",
                      "enum":[true, null, false]}';
 SELECT JSON_SCHEMA_VALID(@schema_true, 'true');
-SET @schema_true= '{ "type": "true",
+SET @schema_true= '{ "type": "boolean",
                      "enum": [null, false]}';
 SELECT JSON_SCHEMA_VALID(@schema_true, 'true');
-SET @schema_true= '{ "type": "false",
+SET @schema_true= '{ "type": "boolean",
                      "enum": [null, true]}';
 SELECT JSON_SCHEMA_VALID(@schema_true, 'true');
-SET @schema_true= '{ "type": "false",
+SET @schema_true= '{ "type": "boolean",
                      "const":"false"}';
 SELECT JSON_SCHEMA_VALID(@schema_true, 'true');
+
+--echo # Type can be more than one
+
+SET @schema= '
+              {
+                "type":["string", "number","array"]
+              }';
+SELECT JSON_SCHEMA_VALID(@schema, '{"key1":"val1"}');
+SELECT JSON_SCHEMA_VALID(@schema, '"abc"');
+SELECT JSON_SCHEMA_VALID(@schema, '3.14');
 
 --echo # Checking number
 
@@ -2275,11 +2277,11 @@ CREATE TABLE num_table(val_num JSON CHECK(JSON_SCHEMA_VALID('{
                                                               "const":15
                                                               }', val_num)));
 CREATE TABLE true_table(val_true JSON CHECK(JSON_SCHEMA_VALID('{
-                                                                "type":"true",
+                                                                "type":"boolean",
                                                                 "enum":[true, false, null]
                                                                }', val_true)));
 CREATE TABLE false_table (val_false JSON CHECK(JSON_SCHEMA_VALID('{
-                                                                   "type":"false"
+                                                                   "type":"boolean"
                                                                   }', val_false)));
 CREATE TABLE null_table (val_null JSON CHECK(JSON_SCHEMA_VALID('{
                                                                  "type":"null"

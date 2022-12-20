@@ -21,14 +21,13 @@
 #include "json_schema.h"
 #include "json_schema_helper.h"
 
-bool Json_schema_annotation::validate(json_engine_t *je)
+bool Json_schema_annotation::validate(const json_engine_t *je)
 {
   /* Nothing to validate. They're only annotations. */
   return false;
 }
 
-bool Json_schema_annotation::handle_keyword(THD *thd, json_engine_t *je,
-                                            List<HASH> *hash_list,
+bool Json_schema_annotation::handle_keyword(THD *thd, json_engine_t *je, 
                                             const char* key_start,
                                             const char* key_end,
                                             List<Json_schema_keyword>
@@ -82,14 +81,13 @@ bool Json_schema_annotation::handle_keyword(THD *thd, json_engine_t *je,
   return res;
 }
 
-bool Json_schema_format::validate(json_engine_t *je)
+bool Json_schema_format::validate(const json_engine_t *je)
 {
   /* Nothing to validate. They're only annotations. */
   return false;
 }
 
-bool Json_schema_format::handle_keyword(THD *thd, json_engine_t *je,
-                                        List<HASH> *hash_list,
+bool Json_schema_format::handle_keyword(THD *thd, json_engine_t *je,              
                                         const char* key_start,
                                         const char* key_end,
                                         List<Json_schema_keyword>
@@ -102,40 +100,60 @@ bool Json_schema_format::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_type::validate(json_engine_t *je)
+bool Json_schema_type::validate(const json_engine_t *je)
 {
-  return je->value_type != type;
+  return !((1 << je->value_type) & type);
 }
 
-bool Json_schema_type::handle_keyword(THD *thd, json_engine_t *je,
-                                      List<HASH> *hash_list,
+bool Json_schema_type::handle_keyword(THD *thd, json_engine_t *je,   
                                       const char* key_start,
                                       const char* key_end,
                                       List<Json_schema_keyword>
                                            *all_keywords)
 {
-  return json_assign_type(&type, je);
+  if (je->value_type == JSON_VALUE_ARRAY)
+  {
+    int level= je->stack_p;
+    while (json_scan_next(je)==0 && je->stack_p >= level)
+    {
+      if (json_read_value(je))
+        return true;
+      json_assign_type(&type, je);
+    }
+    return false;
+  }
+  else if (je->value_type == JSON_VALUE_STRING)
+  {
+    return json_assign_type(&type, je);
+  }
+  else
+  {
+    my_error(ER_JSON_INVALID_VALUE_FOR_KEYWORD, MYF(0), "type");
+    return true;
+  }
 }
 
-bool Json_schema_const::validate(json_engine_t *je)
+bool Json_schema_const::validate(const json_engine_t *je)
 {
-  const char *start= (char*)je->value;
-  const char *end= (char*)je->value+je->value_len;
+  json_engine_t curr_je;
+  curr_je= *je;
+  const char *start= (char*)curr_je.value;
+  const char *end= (char*)curr_je.value+curr_je.value_len;
   json_engine_t temp_je= *je;
   json_engine_t temp_je_2;
-  String a_res("", 0, je->s.cs);
+  String a_res("", 0, curr_je.s.cs);
   int err;
 
-  if (type != je->value_type)
+  if (type != curr_je.value_type)
    return true;
 
-  if (je->value_type <= JSON_VALUE_NUMBER)
+  if (curr_je.value_type <= JSON_VALUE_NUMBER)
   {
     if (!json_value_scalar(&temp_je))
     {
       if (json_skip_level(&temp_je))
       {
-        *je= temp_je;
+        curr_je= temp_je;
         return true;
       }
       end= (char*)temp_je.s.c_str;
@@ -149,7 +167,7 @@ bool Json_schema_const::validate(json_engine_t *je)
     {
       if (json_read_value(&temp_je_2))
       {
-        *je= temp_je;
+        curr_je= temp_je;
         return true;
       }
       json_get_normalized_string(&temp_je_2, &a_res, &err);
@@ -157,7 +175,7 @@ bool Json_schema_const::validate(json_engine_t *je)
        return true;
     }
     else
-      a_res.append(val.ptr(), val.length(), je->s.cs);
+      a_res.append(val.ptr(), val.length(), temp_je.s.cs);
 
     if (a_res.length() == strlen(const_json_value) &&
         !strncmp((const char*)const_json_value, a_res.ptr(),
@@ -166,11 +184,10 @@ bool Json_schema_const::validate(json_engine_t *je)
     return true;
   }
   else
-    return je->value_type != type;
+    return curr_je.value_type != type;
 }
 
 bool Json_schema_const::handle_keyword(THD *thd, json_engine_t *je,
-                                       List<HASH> *hash_list,
                                        const char* key_start,
                                        const char* key_end,
                                        List<Json_schema_keyword>
@@ -216,23 +233,26 @@ bool Json_schema_const::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_enum::validate(json_engine_t *je)
+bool Json_schema_enum::validate(const json_engine_t *je)
 {
+  json_engine_t temp_je;
+  temp_je= *je;
+
   String norm_str((char*)"",0, je->s.cs);
 
   String a_res("", 0, je->s.cs);
   int err= 1;
 
-  if (je->value_type > JSON_VALUE_NUMBER)
+  if (temp_je.value_type > JSON_VALUE_NUMBER)
   {
-    if (je->value_type == JSON_VALUE_TRUE)
+    if (temp_je.value_type == JSON_VALUE_TRUE)
       return !(enum_scalar & HAS_TRUE_VAL);
-    if (je->value_type == JSON_VALUE_FALSE)
+    if (temp_je.value_type == JSON_VALUE_FALSE)
       return !(enum_scalar & HAS_FALSE_VAL);
-    if (je->value_type == JSON_VALUE_NULL)
+    if (temp_je.value_type == JSON_VALUE_NULL)
       return !(enum_scalar & HAS_NULL_VAL);
   }
-  json_get_normalized_string(je, &a_res, &err);
+  json_get_normalized_string(&temp_je, &a_res, &err);
   if (err)
     return true;
 
@@ -246,7 +266,6 @@ bool Json_schema_enum::validate(json_engine_t *je)
 }
 
 bool Json_schema_enum::handle_keyword(THD *thd, json_engine_t *je,
-                                      List<HASH> *hash_list,
                                       const char* key_start,
                                       const char* key_end,
                                       List<Json_schema_keyword>
@@ -257,7 +276,6 @@ bool Json_schema_enum::handle_keyword(THD *thd, json_engine_t *je,
                    je->s.cs, 1024, 0, 0, (my_hash_get_key) get_key_name,
                    NULL, 0))
     return true;
-  hash_list->push_back(&this->enum_values);
 
   if (je->value_type == JSON_VALUE_ARRAY)
   {
@@ -305,7 +323,7 @@ bool Json_schema_enum::handle_keyword(THD *thd, json_engine_t *je,
   }
 }
 
-bool Json_schema_maximum::validate(json_engine_t *je)
+bool Json_schema_maximum::validate(const json_engine_t *je)
 {
   int err= 0;
   char *end;
@@ -318,8 +336,7 @@ bool Json_schema_maximum::validate(json_engine_t *je)
   return (val <= maximum) ? false : true;
 }
 
-bool Json_schema_maximum::handle_keyword(THD *thd, json_engine_t *je,
-                                         List<HASH> *hash_list,
+bool Json_schema_maximum::handle_keyword(THD *thd, json_engine_t *je, 
                                          const char* key_start,
                                          const char* key_end,
                                          List<Json_schema_keyword>
@@ -341,7 +358,7 @@ bool Json_schema_maximum::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_minimum::validate(json_engine_t *je)
+bool Json_schema_minimum::validate(const json_engine_t *je)
 {
   int err= 0;
   char *end;
@@ -355,7 +372,6 @@ bool Json_schema_minimum::validate(json_engine_t *je)
 }
 
 bool Json_schema_minimum::handle_keyword(THD *thd, json_engine_t *je,
-                                         List<HASH> *hash_list,
                                          const char* key_start,
                                          const char* key_end,
                                          List<Json_schema_keyword>
@@ -377,7 +393,7 @@ bool Json_schema_minimum::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_ex_minimum::validate(json_engine_t *je)
+bool Json_schema_ex_minimum::validate(const json_engine_t *je)
 {
   int err= 0;
   char *end;
@@ -391,7 +407,6 @@ bool Json_schema_ex_minimum::validate(json_engine_t *je)
 }
 
 bool Json_schema_ex_minimum::handle_keyword(THD *thd, json_engine_t *je,
-                                            List<HASH> *hash_list,
                                             const char* key_start,
                                             const char* key_end,
                                             List<Json_schema_keyword>
@@ -413,7 +428,7 @@ bool Json_schema_ex_minimum::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_ex_maximum::validate(json_engine_t *je)
+bool Json_schema_ex_maximum::validate(const json_engine_t *je)
 {
   int err= 0;
   char *end;
@@ -427,7 +442,6 @@ bool Json_schema_ex_maximum::validate(json_engine_t *je)
 }
 
 bool Json_schema_ex_maximum::handle_keyword(THD *thd, json_engine_t *je,
-                                            List<HASH> *hash_list,
                                             const char* key_start,
                                             const char* key_end,
                                             List<Json_schema_keyword>
@@ -448,7 +462,7 @@ bool Json_schema_ex_maximum::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_multiple_of::validate(json_engine_t *je)
+bool Json_schema_multiple_of::validate(const json_engine_t *je)
 {
   int err= 0;
   char *end;
@@ -465,7 +479,6 @@ bool Json_schema_multiple_of::validate(json_engine_t *je)
 }
 
 bool Json_schema_multiple_of::handle_keyword(THD *thd, json_engine_t *je,
-                                             List<HASH> *hash_list,
                                              const char* key_start,
                                              const char* key_end,
                                              List<Json_schema_keyword>
@@ -490,7 +503,7 @@ bool Json_schema_multiple_of::handle_keyword(THD *thd, json_engine_t *je,
 }
 
 
-bool Json_schema_max_len::validate(json_engine_t *je)
+bool Json_schema_max_len::validate(const json_engine_t *je)
 {
   if (je->value_type != JSON_VALUE_STRING)
     return false;
@@ -498,7 +511,6 @@ bool Json_schema_max_len::validate(json_engine_t *je)
 }
 
 bool Json_schema_max_len::handle_keyword(THD *thd, json_engine_t *je,
-                                         List<HASH> *hash_list,
                                          const char* key_start,
                                          const char* key_end,
                                          List<Json_schema_keyword>
@@ -521,7 +533,7 @@ bool Json_schema_max_len::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_min_len::validate(json_engine_t *je)
+bool Json_schema_min_len::validate(const json_engine_t *je)
 {
   if (je->value_type != JSON_VALUE_STRING)
     return false;
@@ -529,7 +541,6 @@ bool Json_schema_min_len::validate(json_engine_t *je)
 }
 
 bool Json_schema_min_len::handle_keyword(THD *thd, json_engine_t *je,
-                                         List<HASH> *hash_list,
                                          const char* key_start,
                                          const char* key_end,
                                          List<Json_schema_keyword>
@@ -553,7 +564,7 @@ bool Json_schema_min_len::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_pattern::validate(json_engine_t *je)
+bool Json_schema_pattern::validate(const json_engine_t *je)
 {
   bool pattern_matches= false;
 
@@ -573,7 +584,6 @@ bool Json_schema_pattern::validate(json_engine_t *je)
 }
 
 bool Json_schema_pattern::handle_keyword(THD *thd, json_engine_t *je,
-                                         List<HASH> *hash_list,
                                          const char* key_start,
                                          const char* key_end,
                                          List<Json_schema_keyword>
@@ -595,22 +605,25 @@ bool Json_schema_pattern::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_max_items::validate(json_engine_t *je)
+bool Json_schema_max_items::validate(const json_engine_t *je)
 {
   uint count= 0;
+  json_engine_t curr_je;
 
-  if (je->value_type != JSON_VALUE_ARRAY)
+  curr_je= *je;
+
+  if (curr_je.value_type != JSON_VALUE_ARRAY)
     return false;
 
-  int level= je->stack_p;
-  while(json_scan_next(je)==0 && level <= je->stack_p)
+  int level= curr_je.stack_p;
+  while(json_scan_next(&curr_je)==0 && level <= curr_je.stack_p)
   {
-    if (json_read_value(je))
+    if (json_read_value(&curr_je))
       return true;
     count++;
-    if (!json_value_scalar(je))
+    if (!json_value_scalar(&curr_je))
     {
-      if (json_skip_level(je))
+      if (json_skip_level(&curr_je))
         return true;
     }
   }
@@ -618,7 +631,6 @@ bool Json_schema_max_items::validate(json_engine_t *je)
 }
 
 bool Json_schema_max_items::handle_keyword(THD *thd, json_engine_t *je,
-                                           List<HASH> *hash_list,
                                            const char* key_start,
                                            const char* key_end,
                                            List<Json_schema_keyword>
@@ -642,22 +654,25 @@ bool Json_schema_max_items::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_min_items::validate(json_engine_t *je)
+bool Json_schema_min_items::validate(const json_engine_t *je)
 {
   uint count= 0;
+  json_engine_t  curr_je;
 
-  if (je->value_type != JSON_VALUE_ARRAY)
+  curr_je= *je;
+
+  if (curr_je.value_type != JSON_VALUE_ARRAY)
     return false;
 
-  int level= je->stack_p;
-  while(json_scan_next(je)==0 && level <= je->stack_p)
+  int level= curr_je.stack_p;
+  while(json_scan_next(&curr_je)==0 && level <= curr_je.stack_p)
   {
-    if (json_read_value(je))
+    if (json_read_value(&curr_je))
       return true;
     count++;
-    if (!json_value_scalar(je))
+    if (!json_value_scalar(&curr_je))
     {
-      if (json_skip_level(je))
+      if (json_skip_level(&curr_je))
         return true;
     }
   }
@@ -665,7 +680,6 @@ bool Json_schema_min_items::validate(json_engine_t *je)
 }
 
 bool Json_schema_min_items::handle_keyword(THD *thd, json_engine_t *je,
-                                           List<HASH> *hash_list,
                                            const char* key_start,
                                            const char* key_end,
                                            List<Json_schema_keyword>
@@ -689,26 +703,29 @@ bool Json_schema_min_items::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_contains::validate(json_engine_t *je)
+bool Json_schema_contains::validate(const json_engine_t *je)
 {
   int level= je->stack_p;
   uint contains=0;
+  json_engine_t curr_je;
 
-  if (je->value_type != JSON_VALUE_ARRAY)
+  curr_je= *je;
+
+  if (curr_je.value_type != JSON_VALUE_ARRAY)
     return false;
 
   if (contains_type == JSON_VALUE_UNINITIALIZED)
     return false;
 
-  while(json_scan_next(je)==0 && level <= je->stack_p)
+  while(json_scan_next(&curr_je)==0 && level <= curr_je.stack_p)
   {
-    if (json_read_value(je))
+    if (json_read_value(&curr_je))
       return true;
-    if (je->value_type == contains_type)
+    if ((1 << curr_je.value_type) & contains_type)
       contains++;
-    if (!json_value_scalar(je))
+    if (!json_value_scalar(&curr_je))
     {
-      if (json_skip_level(je))
+      if (json_skip_level(&curr_je))
         return true;
     }
   }
@@ -721,7 +738,6 @@ bool Json_schema_contains::validate(json_engine_t *je)
 }
 
 bool Json_schema_contains::handle_keyword(THD *thd, json_engine_t *je,
-                                          List<HASH> *hash_list,
                                           const char* key_start,
                                           const char* key_end,
                                           List<Json_schema_keyword>
@@ -798,31 +814,32 @@ bool Json_schema_contains::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_items_details::validate(json_engine_t *je)
+bool Json_schema_items_details::validate(const json_engine_t *je)
 {
   int level= je->stack_p;
+  json_engine_t curr_je= *je;
   List_iterator <List<Json_schema_keyword>> it1 (prefix_items);
   List<Json_schema_keyword> *curr_prefix;
 
-  if (je->value_type != JSON_VALUE_ARRAY)
+  if (curr_je.value_type != JSON_VALUE_ARRAY)
     return false;
 
-  while(json_scan_next(je)==0 && je->stack_p >= level)
+  while(json_scan_next(&curr_je)==0 && curr_je.stack_p >= level)
   {
-    if (json_read_value(je))
+    if (json_read_value(&curr_je))
       return true;
     if (item_type != JSON_VALUE_UNINITIALIZED)
     {
-      if (je->value_type != item_type)
+      if (!((1 << curr_je.value_type) & item_type))
         return true;
     }
     if (!(curr_prefix=it1++))
     {
       if (!allow_extra_items)
         return true;
-      if (!json_value_scalar(je))
+      if (!json_value_scalar(&curr_je))
       {
-        if (json_skip_level(je))
+        if (json_skip_level(&curr_je))
          return true;
       }
     }
@@ -832,7 +849,7 @@ bool Json_schema_items_details::validate(json_engine_t *je)
       Json_schema_keyword *curr_keyword= NULL;
       while ((curr_keyword=it2++))
       {
-        if (curr_keyword->validate(je))
+        if (curr_keyword->validate(&curr_je))
           return true;
       }
     }
@@ -841,7 +858,6 @@ bool Json_schema_items_details::validate(json_engine_t *je)
 }
 
 bool Json_schema_items_details::handle_keyword(THD *thd, json_engine_t *je,
-                                               List<HASH> *hash_list,
                                                const char* key_start,
                                                const char* key_end,
                                                List<Json_schema_keyword>
@@ -887,7 +903,7 @@ bool Json_schema_items_details::handle_keyword(THD *thd, json_engine_t *je,
       if (!keyword_list)
         return true;
       if (create_object_and_handle_keyword(thd, &temp_je, keyword_list,
-                                           hash_list, all_keywords))
+                                           all_keywords))
         return true;
 
       prefix_items.push_back(keyword_list);
@@ -935,29 +951,30 @@ bool Json_schema_items_details::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_unique_items::validate(json_engine_t *je)
+bool Json_schema_unique_items::validate(const json_engine_t *je)
 {
   HASH unique_items;
   List <char> norm_str_list;
-  int res= true, level= je->stack_p;
+  json_engine_t curr_je= *je;
+  int res= true, level= curr_je.stack_p;
 
-  if (je->value_type != JSON_VALUE_ARRAY)
+  if (curr_je.value_type != JSON_VALUE_ARRAY)
     return false;
 
-  if (my_hash_init(PSI_INSTRUMENT_ME, &unique_items, je->s.cs,
+  if (my_hash_init(PSI_INSTRUMENT_ME, &unique_items, curr_je.s.cs,
                    1024, 0, 0, (my_hash_get_key) get_key_name, NULL, 0))
     return true;
 
-  while(json_scan_next(je)==0 && level <= je->stack_p)
+  while(json_scan_next(&curr_je)==0 && level <= curr_je.stack_p)
   {
     int has_none= 0, has_true= 2, has_false= 4, has_null= 8, err= 1;
     char *norm_str;
-    String a_res("", 0, je->s.cs);
+    String a_res("", 0, curr_je.s.cs);
 
-    if (json_read_value(je))
+    if (json_read_value(&curr_je))
       goto end;
 
-    json_get_normalized_string(je, &a_res, &err);
+    json_get_normalized_string(&curr_je, &a_res, &err);
 
     if (err)
       goto end;
@@ -970,19 +987,19 @@ bool Json_schema_unique_items::validate(json_engine_t *je)
     strncpy(norm_str, (const char*)a_res.ptr(), a_res.length());
     norm_str_list.push_back(norm_str);
 
-    if (je->value_type == JSON_VALUE_TRUE)
+    if (curr_je.value_type == JSON_VALUE_TRUE)
     {
       if (has_none & has_true)
         goto end;
       has_none= has_none | has_true;
     }
-    else if (je->value_type == JSON_VALUE_FALSE)
+    else if (curr_je.value_type == JSON_VALUE_FALSE)
     {
       if (has_none & has_false)
         goto end;
       has_none= has_none | has_false;
     }
-    else if (je->value_type == JSON_VALUE_NULL)
+    else if (curr_je.value_type == JSON_VALUE_NULL)
     {
       if (has_none & has_null)
         goto end;
@@ -999,7 +1016,7 @@ bool Json_schema_unique_items::validate(json_engine_t *je)
       else
         goto end;
     }
-    a_res.set("", 0, je->s.cs);
+    a_res.set("", 0, curr_je.s.cs);
   }
   res= false;
   end:
@@ -1016,7 +1033,6 @@ bool Json_schema_unique_items::validate(json_engine_t *je)
 }
 
 bool Json_schema_unique_items::handle_keyword(THD *thd, json_engine_t *je,
-                                              List<HASH> *hash_list,
                                               const char* key_start,
                                               const char* key_end,
                                               List<Json_schema_keyword>
@@ -1034,31 +1050,32 @@ bool Json_schema_unique_items::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_max_prop::validate(json_engine_t *je)
+bool Json_schema_max_prop::validate(const json_engine_t *je)
 {
   uint properties_count= 0;
+  json_engine_t curr_je= *je;
   int curr_level= je->stack_p;
 
-  if (je->value_type != JSON_VALUE_OBJECT)
+  if (curr_je.value_type != JSON_VALUE_OBJECT)
     return false;
 
-  while (json_scan_next(je)== 0 && je->stack_p >= curr_level)
+  while (json_scan_next(&curr_je)== 0 && je->stack_p >= curr_level)
   {
-    switch (je->state)
+    switch (curr_je.state)
     {
       case JST_KEY:
       {
         do
         {
-        } while (json_read_keyname_chr(je) == 0);
+        } while (json_read_keyname_chr(&curr_je) == 0);
         properties_count++;
 
-        if (json_read_value(je))
+        if (json_read_value(&curr_je))
           return true;
 
-        if (!json_value_scalar(je))
+        if (!json_value_scalar(&curr_je))
         {
-          if (json_skip_level(je))
+          if (json_skip_level(&curr_je))
             return true;
         }
       }
@@ -1068,7 +1085,6 @@ bool Json_schema_max_prop::validate(json_engine_t *je)
 }
 
 bool Json_schema_max_prop::handle_keyword(THD *thd, json_engine_t *je,
-                                          List<HASH> *hash_list,
                                           const char* key_start,
                                           const char* key_end,
                                           List<Json_schema_keyword>
@@ -1092,31 +1108,32 @@ bool Json_schema_max_prop::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_min_prop::validate(json_engine_t *je)
+bool Json_schema_min_prop::validate(const json_engine_t *je)
 {
   uint properties_count= 0;
   int curr_level= je->stack_p;
+  json_engine_t curr_je= *je;
 
-  if (je->value_type != JSON_VALUE_OBJECT)
+  if (curr_je.value_type != JSON_VALUE_OBJECT)
     return false;
 
-  while (json_scan_next(je)== 0 && je->stack_p >= curr_level)
+  while (json_scan_next(&curr_je)== 0 && je->stack_p >= curr_level)
   {
-    switch (je->state)
+    switch (curr_je.state)
     {
       case JST_KEY:
       {
         do
         {
-        } while (json_read_keyname_chr(je) == 0);
+        } while (json_read_keyname_chr(&curr_je) == 0);
         properties_count++;
 
-        if (json_read_value(je))
+        if (json_read_value(&curr_je))
           return true;
 
-        if (!json_value_scalar(je))
+        if (!json_value_scalar(&curr_je))
         {
-          if (json_skip_level(je))
+          if (json_skip_level(&curr_je))
             return true;
         }
       }
@@ -1126,7 +1143,6 @@ bool Json_schema_min_prop::validate(json_engine_t *je)
 }
 
 bool Json_schema_min_prop::handle_keyword(THD *thd, json_engine_t *je,
-                                          List<HASH> *hash_list,
                                           const char* key_start,
                                           const char* key_end,
                                           List<Json_schema_keyword>
@@ -1150,24 +1166,25 @@ bool Json_schema_min_prop::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_required::validate(json_engine_t *je)
+bool Json_schema_required::validate(const json_engine_t *je)
 {
+  json_engine_t curr_je= *je;
   List<char> malloc_mem_list;
   HASH required;
-  int res= true, curr_level= je->stack_p;
+  int res= true, curr_level= curr_je.stack_p;
   List_iterator<String> it(required_properties);
   String *curr_str;
 
-  if (je->value_type != JSON_VALUE_OBJECT)
+  if (curr_je.value_type != JSON_VALUE_OBJECT)
     return false;
 
   if(my_hash_init(PSI_INSTRUMENT_ME, &required,
-               je->s.cs, 1024, 0, 0, (my_hash_get_key) get_key_name,
+               curr_je.s.cs, 1024, 0, 0, (my_hash_get_key) get_key_name,
                NULL, 0))
       return true;
-  while (json_scan_next(je)== 0 && je->stack_p >= curr_level)
+  while (json_scan_next(&curr_je)== 0 && curr_je.stack_p >= curr_level)
   {
-    switch (je->state)
+    switch (curr_je.state)
     {
       case JST_KEY:
       {
@@ -1175,11 +1192,11 @@ bool Json_schema_required::validate(json_engine_t *je)
         int key_len;
         char *str;
 
-        key_start= je->s.c_str;
+        key_start= curr_je.s.c_str;
         do
         {
-          key_end= je->s.c_str;
-        } while (json_read_keyname_chr(je) == 0);
+          key_end= curr_je.s.c_str;
+        } while (json_read_keyname_chr(&curr_je) == 0);
 
         key_len= (int)(key_end-key_start);
         str= (char*)malloc((size_t)(key_len)+1);
@@ -1213,7 +1230,6 @@ bool Json_schema_required::validate(json_engine_t *je)
 }
 
 bool Json_schema_required::handle_keyword(THD *thd, json_engine_t *je,
-                                          List<HASH> *hash_list,
                                           const char* key_start,
                                           const char* key_end,
                                           List<Json_schema_keyword>
@@ -1240,26 +1256,27 @@ bool Json_schema_required::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_dependent_prop::validate(json_engine_t *je)
+bool Json_schema_dependent_prop::validate(const json_engine_t *je)
 {
+  json_engine_t curr_je= *je;
   HASH properties;
   bool res= true;
-  int curr_level= je->stack_p;
+  int curr_level= curr_je.stack_p;
   List <char> malloc_mem_list;
   List_iterator<st_dependent_keywords> it(dependent_required);
   st_dependent_keywords *curr_keyword= NULL;
 
-  if (je->value_type != JSON_VALUE_OBJECT)
+  if (curr_je.value_type != JSON_VALUE_OBJECT)
     return false;
 
   if (my_hash_init(PSI_INSTRUMENT_ME, &properties,
-                 je->s.cs, 1024, 0, 0, (my_hash_get_key) get_key_name,
+                 curr_je.s.cs, 1024, 0, 0, (my_hash_get_key) get_key_name,
                  NULL, 0))
     return true;
 
-  while (json_scan_next(je)== 0 && je->stack_p >= curr_level)
+  while (json_scan_next(&curr_je)== 0 && curr_je.stack_p >= curr_level)
   {
-    switch (je->state)
+    switch (curr_je.state)
     {
       case JST_KEY:
       {
@@ -1267,11 +1284,11 @@ bool Json_schema_dependent_prop::validate(json_engine_t *je)
         int key_len;
         char *str;
 
-        key_start= je->s.c_str;
+        key_start= curr_je.s.c_str;
         do
         {
-          key_end= je->s.c_str;
-        } while (json_read_keyname_chr(je) == 0);
+          key_end= curr_je.s.c_str;
+        } while (json_read_keyname_chr(&curr_je) == 0);
 
         key_len= (int)(key_end-key_start);
         str= (char*)malloc((size_t)(key_len)+1);
@@ -1319,7 +1336,6 @@ bool Json_schema_dependent_prop::validate(json_engine_t *je)
 }
 
 bool Json_schema_dependent_prop::handle_keyword(THD *thd, json_engine_t *je,
-                                                List<HASH> *hash_list,
                                                 const char* key_start,
                                                 const char* key_end,
                                                 List<Json_schema_keyword>
@@ -1401,25 +1417,27 @@ bool Json_schema_dependent_prop::handle_keyword(THD *thd, json_engine_t *je,
   return false;
 }
 
-bool Json_schema_properties::validate(json_engine_t *je)
+bool Json_schema_properties::validate(const json_engine_t *je)
 {
-  if (je->value_type != JSON_VALUE_OBJECT)
+  json_engine_t curr_je= *je;
+
+  if (curr_je.value_type != JSON_VALUE_OBJECT)
     return false;
 
-  int level= je->stack_p;
-  while (json_scan_next(je)==0 && level <= je->stack_p)
+  int level= curr_je.stack_p;
+  while (json_scan_next(&curr_je)==0 && level <= curr_je.stack_p)
   {
-    switch(je->state)
+    switch(curr_je.state)
     {
       case JST_KEY:
       {
-        const uchar *k_end, *k_start= je->s.c_str;
+        const uchar *k_end, *k_start= curr_je.s.c_str;
         do
         {
-          k_end= je->s.c_str;
-        } while (json_read_keyname_chr(je) == 0);
+          k_end= curr_je.s.c_str;
+        } while (json_read_keyname_chr(&curr_je) == 0);
 
-        if (json_read_value(je))
+        if (json_read_value(&curr_je))
           return true;
 
         st_property *curr_property= NULL;
@@ -1434,7 +1452,7 @@ bool Json_schema_properties::validate(json_engine_t *je)
 
           while ((curr_keyword=it++))
           {
-            temp_je= *je;
+            temp_je= curr_je;
             if (curr_keyword->validate(&temp_je))
             {
               return true;
@@ -1444,9 +1462,9 @@ bool Json_schema_properties::validate(json_engine_t *je)
         }
         else
         {
-          if (json_value_scalar(je))
+          if (json_value_scalar(&curr_je))
           {
-            if (json_skip_level(je))
+            if (json_skip_level(&curr_je))
               return true;
           }
         }
@@ -1458,7 +1476,6 @@ bool Json_schema_properties::validate(json_engine_t *je)
 }
 
 bool Json_schema_properties::handle_keyword(THD *thd, json_engine_t *je,
-                                            List<HASH> *hash_list,
                                             const char* key_start,
                                             const char* key_end,
                                             List<Json_schema_keyword>
@@ -1475,7 +1492,6 @@ bool Json_schema_properties::handle_keyword(THD *thd, json_engine_t *je,
                      (my_hash_get_key) get_key_name_for_property,
                      NULL, 0))
       return true;
-  hash_list->push_back(&this->properties);
 
   int level= je->stack_p;
   while (json_scan_next(je)==0 && level <= je->stack_p)
@@ -1509,7 +1525,6 @@ bool Json_schema_properties::handle_keyword(THD *thd, json_engine_t *je,
                     (size_t)(k_end-k_start));
             if (create_object_and_handle_keyword(thd, je,
                                              curr_property->curr_schema,
-                                             hash_list,
                                              all_keywords))
               return true;
             if (my_hash_insert(&properties, (const uchar*)curr_property))
@@ -1711,7 +1726,6 @@ Json_schema_keyword* create_object(THD *thd, json_engine_t *je,
 
 bool create_object_and_handle_keyword(THD *thd, json_engine_t *je,
                                       List<Json_schema_keyword> *keyword_list,
-                                      List<HASH> *hash_list,
                                       List<Json_schema_keyword> *all_keywords)
 {
   int level= je->stack_p;
@@ -1799,7 +1813,7 @@ bool create_object_and_handle_keyword(THD *thd, json_engine_t *je,
           if (all_keywords)
             all_keywords->push_back(curr_keyword);
         }
-        curr_keyword->handle_keyword(thd, je, hash_list,
+        curr_keyword->handle_keyword(thd, je,
                                      (const char*)key_start,
                                      (const char*)key_end, all_keywords);
         break;

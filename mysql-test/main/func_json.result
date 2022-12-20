@@ -2395,61 +2395,55 @@ JSON_SCHEMA_VALID(@schema, 'false')
 1
 # Checking scalar against json schema
 # Checking boolean and null
-SET @schema_true= '{ "type": "true"}';
+SET @schema_true= '{ "type": "boolean"}';
 SELECT JSON_SCHEMA_VALID(@schema_true, 'true');
 JSON_SCHEMA_VALID(@schema_true, 'true')
 1
 SELECT JSON_SCHEMA_VALID(@schema_true, 'false');
 JSON_SCHEMA_VALID(@schema_true, 'false')
-0
+1
 SELECT JSON_SCHEMA_VALID(@schema_true, 'null');
 JSON_SCHEMA_VALID(@schema_true, 'null')
 0
-SET @schema_false= '{ "type": "false"}';
-SELECT JSON_SCHEMA_VALID(@schema_false, 'true');
-JSON_SCHEMA_VALID(@schema_false, 'true')
-0
-SELECT JSON_SCHEMA_VALID(@schema_false, 'false');
-JSON_SCHEMA_VALID(@schema_false, 'false')
-1
-SELECT JSON_SCHEMA_VALID(@schema_false, 'null');
-JSON_SCHEMA_VALID(@schema_false, 'null')
-0
-SET @schema_null= '{ "type": "null"}';
-SELECT JSON_SCHEMA_VALID(@schema_null, 'true');
-JSON_SCHEMA_VALID(@schema_null, 'true')
-0
-SELECT JSON_SCHEMA_VALID(@schema_null, 'false');
-JSON_SCHEMA_VALID(@schema_null, 'false')
-0
-SELECT JSON_SCHEMA_VALID(@schema_null, 'null');
-JSON_SCHEMA_VALID(@schema_null, 'null')
-1
-SET @schema_true= '{ "type": "true",
+SET @schema_true= '{ "type": "boolean",
                      "const":"false"}';
 SELECT JSON_SCHEMA_VALID(@schema_true, 'true');
 JSON_SCHEMA_VALID(@schema_true, 'true')
 0
-SET @schema_true= '{ "type": "true",
+SET @schema_true= '{ "type": "boolean",
                      "enum":[true, null, false]}';
 SELECT JSON_SCHEMA_VALID(@schema_true, 'true');
 JSON_SCHEMA_VALID(@schema_true, 'true')
 1
-SET @schema_true= '{ "type": "true",
+SET @schema_true= '{ "type": "boolean",
                      "enum": [null, false]}';
 SELECT JSON_SCHEMA_VALID(@schema_true, 'true');
 JSON_SCHEMA_VALID(@schema_true, 'true')
 0
-SET @schema_true= '{ "type": "false",
+SET @schema_true= '{ "type": "boolean",
                      "enum": [null, true]}';
 SELECT JSON_SCHEMA_VALID(@schema_true, 'true');
 JSON_SCHEMA_VALID(@schema_true, 'true')
-0
-SET @schema_true= '{ "type": "false",
+1
+SET @schema_true= '{ "type": "boolean",
                      "const":"false"}';
 SELECT JSON_SCHEMA_VALID(@schema_true, 'true');
 JSON_SCHEMA_VALID(@schema_true, 'true')
 0
+# Type can be more than one
+SET @schema= '
+              {
+                "type":["string", "number","array"]
+              }';
+SELECT JSON_SCHEMA_VALID(@schema, '{"key1":"val1"}');
+JSON_SCHEMA_VALID(@schema, '{"key1":"val1"}')
+0
+SELECT JSON_SCHEMA_VALID(@schema, '"abc"');
+JSON_SCHEMA_VALID(@schema, '"abc"')
+1
+SELECT JSON_SCHEMA_VALID(@schema, '3.14');
+JSON_SCHEMA_VALID(@schema, '3.14')
+1
 # Checking number
 SET @schema_number= '{
   "maximum":7,
@@ -3193,11 +3187,11 @@ CREATE TABLE num_table(val_num JSON CHECK(JSON_SCHEMA_VALID('{
                                                               "const":15
                                                               }', val_num)));
 CREATE TABLE true_table(val_true JSON CHECK(JSON_SCHEMA_VALID('{
-                                                                "type":"true",
+                                                                "type":"boolean",
                                                                 "enum":[true, false, null]
                                                                }', val_true)));
 CREATE TABLE false_table (val_false JSON CHECK(JSON_SCHEMA_VALID('{
-                                                                   "type":"false"
+                                                                   "type":"boolean"
                                                                   }', val_false)));
 CREATE TABLE null_table (val_null JSON CHECK(JSON_SCHEMA_VALID('{
                                                                  "type":"null"

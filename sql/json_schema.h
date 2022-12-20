@@ -26,9 +26,8 @@
 class Json_schema_keyword : public Sql_alloc
 {
   public:
-    virtual bool validate(json_engine_t *je) {return false;}
+    virtual bool validate(const json_engine_t *je) {return false;}
     virtual bool handle_keyword(THD *thd, json_engine_t *je,
-                                List<HASH> *hash_list,
                                 const char* key_start,
                                 const char* key_end,
                                 List<Json_schema_keyword> *all_keywords)
@@ -42,50 +41,54 @@ class Json_schema_keyword : public Sql_alloc
 class Json_schema_annotation : public Json_schema_keyword
 {
   public:
-    bool validate(json_engine_t *je);
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 class Json_schema_format : public Json_schema_keyword
 {
   public:
-    bool validate(json_engine_t *je);
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 typedef List<Json_schema_keyword> List_schema_keyword;
 
 class Json_schema_type : public Json_schema_keyword
 {
+  private:
+    uint type;
+
   public:
-    enum json_value_types type;
-    bool validate(json_engine_t *je);
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
+    Json_schema_type()
+    {
+      type= 0;
+    }
 };
 
 class Json_schema_const : public Json_schema_keyword
 {
-  public:
+  private:
     char *const_json_value;
+
+  public:
     enum json_value_types type;
-    bool validate(json_engine_t *je);
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
     Json_schema_const()
     {
       const_json_value= NULL;
@@ -98,118 +101,131 @@ enum enum_scalar_values {
                         };
 class Json_schema_enum : public  Json_schema_keyword
 {
-  public:
+  private:
     HASH enum_values;
     uint enum_scalar;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
     Json_schema_enum()
     {
       enum_scalar= HAS_NO_VAL;
+    }
+    void cleanup()
+    {
+      my_hash_free(&enum_values);
     }
 
 };
 
 class Json_schema_maximum : public Json_schema_keyword
 {
-  public:
+  private:
     double maximum;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 class Json_schema_minimum : public Json_schema_keyword
 {
-  public:
+  private:
     double minimum;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 class Json_schema_multiple_of : public Json_schema_keyword
 {
-  public:
+  private:
     double multiple_of;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 class Json_schema_ex_maximum : public Json_schema_keyword
 {
-  public:
+  private:
     double ex_max;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 class Json_schema_ex_minimum : public Json_schema_keyword
 {
-  public:
+  private:
     double ex_min;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 class Json_schema_max_len : public Json_schema_keyword
 {
-  public:
+  private:
     uint max_len;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 class Json_schema_min_len : public Json_schema_keyword
 {
-  public:
+  private:
     uint min_len;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 class Json_schema_pattern : public Json_schema_keyword
 {
-  public:
+  private:
     Regexp_processor_pcre re;
     Item *pattern;
     Item_string *str;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
     Json_schema_pattern()
     {
       str= NULL;
@@ -220,26 +236,28 @@ class Json_schema_pattern : public Json_schema_keyword
 
 class Json_schema_max_items : public Json_schema_keyword
 {
-  public:
+  private:
     uint max_items;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 class Json_schema_min_items : public Json_schema_keyword
 {
-  public:
+  private:
     uint min_items;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 enum array_property_flag
@@ -253,34 +271,36 @@ enum array_property_flag
 */
 class Json_schema_contains : public Json_schema_keyword
 {
-  public:
-    enum json_value_types contains_type;
+  private:
+    uint contains_type;
     uint max_contains;
     uint min_contains;
     uint contains_flag;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
     Json_schema_contains()
     {
       contains_flag= HAS_NO_ARRAY_FLAG;
-      contains_type= JSON_VALUE_UNINITIALIZED;
+      contains_type= 0;
     }
 };
 
 class Json_schema_unique_items : public Json_schema_keyword
 {
-  public:
+  private:
     bool is_unique;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
     Json_schema_unique_items()
     {
       is_unique= false;
@@ -295,19 +315,20 @@ class Json_schema_unique_items : public Json_schema_keyword
 */
 class Json_schema_items_details : public Json_schema_keyword
 {
-  public:
+  private:
     List <List_schema_keyword> prefix_items;
     bool allow_extra_items;
-    enum json_value_types item_type;
-    bool validate(json_engine_t *je);
+    uint item_type;
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
     Json_schema_items_details()
     {
-      item_type= JSON_VALUE_UNINITIALIZED;
+      item_type= 0;
       allow_extra_items= true;
     }
 };
@@ -320,50 +341,60 @@ typedef struct property
 
 class Json_schema_properties : public Json_schema_keyword
 {
-  public:
+  private:
     HASH properties;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
+    void cleanup()
+    {
+      my_hash_free(&properties);
+      return;
+    }
+    
 };
 
 class Json_schema_max_prop : public Json_schema_keyword
 {
-  public:
+  private:
     uint max_prop;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 class Json_schema_min_prop : public Json_schema_keyword
 {
-  public:
+  private:
     uint min_prop;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 class Json_schema_required : public Json_schema_keyword
 {
-  public:
+  private:
     List <String> required_properties;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 typedef struct dependent_keyowrds
@@ -374,19 +405,19 @@ typedef struct dependent_keyowrds
 
 class Json_schema_dependent_prop : public Json_schema_keyword
 {
-  public:
+  private:
     List<st_dependent_keywords> dependent_required;
-    bool validate(json_engine_t *je);
+
+  public:
+    bool validate(const json_engine_t *je) override;
     bool handle_keyword(THD *thd, json_engine_t *je,
-                        List<HASH> *hash_list,
                         const char* key_start,
                         const char* key_end,
-                        List<Json_schema_keyword> *all_keywords);
+                        List<Json_schema_keyword> *all_keywords) override;
 };
 
 bool create_object_and_handle_keyword(THD *thd, json_engine_t *je,
-                                      List<Json_schema_keyword> *keyword_list,
-                                      List<HASH> *hash_list,
+                                      List<Json_schema_keyword> *keyword_list,                           
                                       List<Json_schema_keyword> *all_keywords);
 uchar* get_key_name_for_property(const char *key_name, size_t *length,
                     my_bool /* unused */);

@@ -22,7 +22,7 @@
 
 bool json_key_equals(const char* key,  LEX_CSTRING val, int key_len);
 
-bool json_assign_type(enum json_value_types *curr_type, json_engine_t *je);
+bool json_assign_type(uint *curr_type, json_engine_t *je);
 uchar* get_key_name(const char *key_name, size_t *length,
                     my_bool /* unused */);
 void json_get_normalized_string(json_engine_t *je, String *res,
