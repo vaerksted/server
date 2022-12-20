@@ -3235,18 +3235,16 @@ database_corrupted:
                  << FORCE_RECOVERY_MSG;
     }
 
-    if (!srv_force_recovery)
-      goto release_page;
-  }
-
-  if (err == DB_PAGE_CORRUPTED || err == DB_DECRYPTION_FAILED)
-  {
+    if (err == DB_PAGE_CORRUPTED || err == DB_DECRYPTION_FAILED ||
+        !srv_force_recovery)
+    {
 release_page:
-    buf_pool.corrupted_evict(this, buf_page_t::READ_FIX);
-    return err;
+      buf_pool.corrupted_evict(this, buf_page_t::READ_FIX);
+      return err;
+    }
   }
 
-  const bool recovery= recv_recovery_is_on();
+  const bool recovery= frame && recv_recovery_is_on();
 
   if (recovery && !recv_recover_page(node.space, this))
     return DB_PAGE_CORRUPTED;

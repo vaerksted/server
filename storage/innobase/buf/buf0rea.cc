@@ -64,7 +64,8 @@ Sets the io_fix flag to BUF_IO_READ and sets a non-recursive exclusive lock
 on the buffer frame. The io-handler must take care that the flag is cleared
 and the lock released later.
 @param page_id    page identifier
-@param zip_size   ROW_FORMAT=COMPRESSED page size, or 0
+@param zip_size   ROW_FORMAT=COMPRESSED page size, or 0,
+                  bitwise-ORed with 1 in recovery
 @param chain      buf_pool.page_hash cell for page_id
 @param block      preallocated buffer block (set to nullptr if consumed)
 @return pointer to the block
@@ -76,10 +77,10 @@ static buf_page_t *buf_page_init_for_read(const page_id_t page_id,
                                           buf_block_t *&block)
 {
   buf_page_t *bpage= nullptr;
-  if (!zip_size || recv_recovery_is_on())
+  if (!zip_size || (zip_size & 1))
   {
     bpage= &block->page;
-    block->initialise(page_id, zip_size, buf_page_t::READ_FIX);
+    block->initialise(page_id, zip_size & ~1, buf_page_t::READ_FIX);
     /* x_unlock() will be invoked
     in buf_page_t::read_complete() by the io-handler thread. */
     block->page.lock.x_lock(true);
@@ -113,6 +114,8 @@ page_exists:
       goto page_exists;
     }
   }
+
+  zip_size&= ~1;
 
   if (UNIV_LIKELY(bpage != nullptr))
   {
@@ -199,7 +202,8 @@ Sets the io_fix flag and sets an exclusive lock on the buffer frame. The
 flag is cleared and the x-lock released by an i/o-handler thread.
 
 @param[in] page_id	page id
-@param[in] zip_size	ROW_FORMAT=COMPRESSED page size, or 0
+@param[in] zip_size	ROW_FORMAT=COMPRESSED page size, or 0,
+			bitwise-ORed with 1 in recovery
 @param[in,out] chain	buf_pool.page_hash cell for page_id
 @param[out] err		DB_SUCCESS or DB_TABLESPACE_DELETED
 			if we are trying
@@ -242,8 +246,8 @@ buf_read_page_low(
 		 "read page " << page_id << " zip_size=" << zip_size
 		 << (sync ? " sync" : " async"));
 
-	void* dst = zip_size ? bpage->zip.data : bpage->frame;
-	const ulint len = zip_size ? zip_size : srv_page_size;
+	void* dst = zip_size > 1 ? bpage->zip.data : bpage->frame;
+	const ulint len = zip_size & ~1 ? zip_size & ~1 : srv_page_size;
 
 	auto fio = space->io(IORequest(sync
 				       ? IORequest::READ_SYNC
@@ -639,7 +643,7 @@ void buf_read_recv_pages(uint32_t space_id, st_::span<uint32_t> page_nos)
 		return;
 	}
 
-	const ulint zip_size = space->zip_size();
+	const ulint zip_size = space->zip_size() | 1;
 	buf_block_t* block = buf_LRU_get_free_block(have_no_mutex);
 
 	for (ulint i = 0; i < page_nos.size(); i++) {
