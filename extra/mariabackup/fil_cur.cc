@@ -365,6 +365,7 @@ xb_fil_cur_result_t xb_fil_cur_read(xb_fil_cur_t*	cursor,
 	ib_int64_t		to_read;
 	const ulint		page_size = cursor->page_size;
 	bool			defer = false;
+	static uint32_t		n_read_undo = 0;
 	xb_ad(!cursor->is_system() || page_size == srv_page_size);
 
 	cursor->read_filter->get_next_batch(&cursor->read_filter_ctxt,
@@ -374,6 +375,7 @@ xb_fil_cur_result_t xb_fil_cur_read(xb_fil_cur_t*	cursor,
 		return(XB_FIL_CUR_EOF);
 	}
 
+reinit_buf:
 	if (to_read > (ib_int64_t) cursor->buf_size) {
 		to_read = (ib_int64_t) cursor->buf_size;
 	}
@@ -414,8 +416,40 @@ read_retry:
 	cursor->buf_offset = offset;
 	cursor->buf_page_no = static_cast<unsigned>(offset / page_size);
 
-	if (os_file_read(IORequestRead, cursor->file, cursor->buf, offset,
+	DBUG_EXECUTE_IF("undo_space_trunc",
+			if (cursor->space_id == 1
+			    && (n_read_undo == 0
+			        || cursor->buf_page_no
+				   == SRV_UNDO_TABLESPACE_SIZE_IN_PAGES))
+			  goto read_fail;);
+
+	IORequest request{nullptr, nullptr, cursor->node, IORequest::READ_SYNC};
+
+	if (os_file_read(request, cursor->file, cursor->buf, offset,
 			 (ulint) to_read, nullptr) != DB_SUCCESS) {
+#ifdef UNIV_DEBUG
+read_fail:
+#endif
+		if (srv_is_undo_tablespace(cursor->space_id)) {
+			if (cursor->buf_page_no
+			    >= SRV_UNDO_TABLESPACE_SIZE_IN_PAGES) {
+				ret = XB_FIL_CUR_SKIP;
+				goto func_exit;
+			}
+
+			to_read = SRV_UNDO_TABLESPACE_SIZE_IN_PAGES
+				  * page_size;
+
+			if (n_read_undo > 1) {
+				ret = XB_FIL_CUR_ERROR;
+				goto func_exit;
+			}
+
+			n_read_undo++;
+			space->release();
+			goto reinit_buf;
+		}
+
 		ret = XB_FIL_CUR_ERROR;
 		goto func_exit;
 	}
