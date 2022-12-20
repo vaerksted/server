@@ -106,12 +106,12 @@ for my $f (keys %print_formats)
   }
 }
 
-register_opt('print-core|C', ':s',
+register_opt('core-print|C', ':s',
   "Print core dump format: ". $print_formats. " (for not printing cores). ".
   "Defaults to value of MTR_PRINT_CORE or 'short'");
 if (!IS_WINDOWS)
 {
-  register_opt('print-method', '=s',
+  register_opt('core-method', '=s',
     "Print core method: ". join(', ', $print_methods). " (try each method until success). ".
     "Defaults to 'auto'");
 }
