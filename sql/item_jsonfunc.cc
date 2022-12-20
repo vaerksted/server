@@ -4792,7 +4792,6 @@ void Item_func_json_schema_valid::cleanup()
   Json_schema_keyword *curr_schema;
   while ((curr_schema= it2++))
   {
-    curr_schema->cleanup();
     delete curr_schema;
     curr_schema= nullptr;
   }

@@ -1446,14 +1446,12 @@ bool Json_schema_properties::validate(const json_engine_t *je)
                                                    (const uchar*)k_start,
                                                     (size_t)(k_end-k_start))))
         {
-          json_engine_t temp_je;
           List_iterator<Json_schema_keyword> it(*(curr_property->curr_schema));
           Json_schema_keyword *curr_keyword= NULL;
 
           while ((curr_keyword=it++))
           {
-            temp_je= curr_je;
-            if (curr_keyword->validate(&temp_je))
+            if (curr_keyword->validate(&curr_je))
             {
               return true;
               break;

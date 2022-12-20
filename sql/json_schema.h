@@ -35,7 +35,6 @@ class Json_schema_keyword : public Sql_alloc
       return false;
     }
     virtual ~Json_schema_keyword() = default;
-    virtual void cleanup() { return; }
 };
 
 class Json_schema_annotation : public Json_schema_keyword
@@ -115,7 +114,7 @@ class Json_schema_enum : public  Json_schema_keyword
     {
       enum_scalar= HAS_NO_VAL;
     }
-    void cleanup()
+    ~Json_schema_enum()
     {
       my_hash_free(&enum_values);
     }
@@ -231,7 +230,7 @@ class Json_schema_pattern : public Json_schema_keyword
       str= NULL;
       pattern= NULL;
     }
-    void cleanup() { re.cleanup(); }
+    ~Json_schema_pattern() { re.cleanup(); }
 };
 
 class Json_schema_max_items : public Json_schema_keyword
@@ -350,10 +349,9 @@ class Json_schema_properties : public Json_schema_keyword
                         const char* key_start,
                         const char* key_end,
                         List<Json_schema_keyword> *all_keywords) override;
-    void cleanup()
+    ~Json_schema_properties()
     {
       my_hash_free(&properties);
-      return;
     }
     
 };
