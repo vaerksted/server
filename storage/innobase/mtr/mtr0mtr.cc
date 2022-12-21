@@ -1232,3 +1232,52 @@ void mtr_t::free(const fil_space_t &space, uint32_t offset)
     m_log.close(log_write<FREE_PAGE>(id, nullptr));
   }
 }
+
+namespace llvm {
+// Note: Moving this function into the header may cause performance regression.
+template <class Size_T>
+static size_t getNewCapacity(size_t MinSize, size_t TSize, size_t OldCapacity) {
+  constexpr size_t MaxSize = std::numeric_limits<Size_T>::max();
+
+#if 0
+  // Ensure we can fit the new capacity.
+  // This is only going to be applicable when the capacity is 32 bit.
+  if (MinSize > MaxSize)
+    report_size_overflow(MinSize, MaxSize);
+
+  // Ensure we can meet the guarantee of space for at least one more element.
+  // The above check alone will not catch the case where grow is called with a
+  // default MinSize of 0, but the current capacity cannot be increased.
+  // This is only going to be applicable when the capacity is 32 bit.
+  if (OldCapacity == MaxSize)
+    report_at_maximum_capacity(MaxSize);
+#endif
+
+  // In theory 2*capacity can overflow if the capacity is 64 bit, but the
+  // original capacity would never be large enough for this to be a problem.
+  size_t NewCapacity = 2 * OldCapacity + 1; // Always grow.
+  return std::min(std::max(NewCapacity, MinSize), MaxSize);
+}
+
+// Note: Moving this function into the header may cause performance regression.
+template <class Size_T>
+void SmallVectorBase<Size_T>::grow_pod(void *FirstEl, size_t MinSize,
+                                       size_t TSize) {
+  size_t NewCapacity = getNewCapacity<Size_T>(MinSize, TSize, this->capacity());
+  void *NewElts;
+  if (BeginX == FirstEl) {
+    NewElts = malloc(NewCapacity * TSize);
+
+    // Copy the elements over.  No need to run dtors on PODs.
+    memcpy(NewElts, this->BeginX, size() * TSize);
+  } else {
+    // If this wasn't grown from the inline copy, grow the allocated space.
+    NewElts = realloc(this->BeginX, NewCapacity * TSize);
+  }
+
+  this->BeginX = NewElts;
+  this->Capacity = Size_T(NewCapacity);
+}
+}
+
+template class llvm::SmallVectorBase<uint32_t>;

@@ -29,7 +29,7 @@ Created 11/26/1995 Heikki Tuuri
 #include "fil0fil.h"
 #include "dyn0buf.h"
 #include "buf0buf.h"
-#include <vector>
+#include "SmallVector.h"
 
 /** Start a mini-transaction. */
 #define mtr_start(m)		(m)->start()
@@ -128,7 +128,7 @@ struct mtr_t {
   void release_s_latch_at_savepoint(ulint savepoint, index_lock *lock)
   {
     ut_ad(is_active());
-    mtr_memo_slot_t &slot= m_memo.at(savepoint);
+    mtr_memo_slot_t &slot= m_memo.data()[savepoint];
     ut_ad(slot.object == lock);
     ut_ad(slot.type == MTR_MEMO_S_LOCK);
     slot.object= nullptr;
@@ -138,7 +138,7 @@ struct mtr_t {
   void release_block_at_savepoint(ulint savepoint, buf_block_t *block)
   {
     ut_ad(is_active());
-    mtr_memo_slot_t &slot= m_memo.at(savepoint);
+    mtr_memo_slot_t &slot= m_memo.data()[savepoint];
     ut_ad(slot.object == block);
     ut_ad(!(slot.type & MTR_MEMO_MODIFY));
     slot.object= nullptr;
@@ -172,7 +172,7 @@ struct mtr_t {
     ut_ad(is_active());
     ut_ad(!memo_contains_flagged(block, MTR_MEMO_PAGE_S_FIX |
                                  MTR_MEMO_PAGE_X_FIX | MTR_MEMO_PAGE_SX_FIX));
-    mtr_memo_slot_t &slot= m_memo.at(savepoint);
+    mtr_memo_slot_t &slot= m_memo.data()[savepoint];
     ut_ad(slot.object == block);
     ut_ad(slot.type == MTR_MEMO_BUF_FIX);
     slot.type= MTR_MEMO_PAGE_X_FIX;
@@ -189,7 +189,7 @@ struct mtr_t {
     ut_ad(is_active());
     ut_ad(!memo_contains_flagged(block, MTR_MEMO_PAGE_S_FIX |
                                  MTR_MEMO_PAGE_X_FIX | MTR_MEMO_PAGE_SX_FIX));
-    mtr_memo_slot_t &slot= m_memo.at(savepoint);
+    mtr_memo_slot_t &slot= m_memo.data()[savepoint];
     ut_ad(slot.object == block);
     ut_ad(slot.type == MTR_MEMO_BUF_FIX);
     slot.type= MTR_MEMO_PAGE_SX_FIX;
@@ -409,7 +409,7 @@ public:
   @param latch   latch type */
   void u_lock_register(ulint savepoint)
   {
-    mtr_memo_slot_t &slot= m_memo.at(savepoint);
+    mtr_memo_slot_t &slot= m_memo.data()[savepoint];
     ut_ad(slot.type == MTR_MEMO_BUF_FIX);
     slot.type= MTR_MEMO_PAGE_SX_FIX;
   }
@@ -418,7 +418,7 @@ public:
   @param latch   latch type */
   void s_lock_register(ulint savepoint)
   {
-    mtr_memo_slot_t &slot= m_memo.at(savepoint);
+    mtr_memo_slot_t &slot= m_memo.data()[savepoint];
     ut_ad(slot.type == MTR_MEMO_BUF_FIX);
     slot.type= MTR_MEMO_PAGE_S_FIX;
   }
@@ -787,7 +787,7 @@ private:
 #endif /* UNIV_DEBUG */
 
   /** acquired dict_index_t::lock, fil_space_t::latch, buf_block_t */
-  std::vector<mtr_memo_slot_t> m_memo;
+  llvm::SmallVector<mtr_memo_slot_t, size_t{16}> m_memo;
 
   /** mini-transaction log */
   mtr_buf_t m_log;
